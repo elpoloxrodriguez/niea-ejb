@@ -39,14 +39,14 @@
 
 1. **Clonar el repositorio**
    ```bash
-   git clone <url-del-repositorio>
+   git clone https://github.com/elpoloxrodriguez/niea-ejb
    cd NIEA-EJB
    ```
 
 2. **Configuración del Backend**
    ```bash
    # Crear entorno virtual
-   python -m venv venv
+   python3 -m venv venv
    source venv/bin/activate  # En Windows: venv\Scripts\activate
    
    # Instalar dependencias
@@ -70,7 +70,7 @@
 ### Iniciar el Backend
 ```bash
 # Desde el directorio raíz del proyecto
-python app.py
+python3 api.py
 ```
 *El servidor estará disponible en: `http://localhost:5000`*
 
@@ -124,7 +124,7 @@ Este proyecto está desarrollado para uso exclusivo del Ejército Bolivariano de
 
 <div align="center">
 
-**Desarrollado con 💪 para la Patria Grande**
+**Desarrollado para la Patria Grande**
 
 *"Independencia y Patria Socialista. Viviremos y Venceremos"*
 
