@@ -5,7 +5,7 @@ from candidatos_ascenso import (
     guardar_candidatos_en_db,
     CATEGORIAS
 )
-from database import get_db_connection, PostgreSQLConnection
+from config.database import get_db_connection, PostgreSQLConnection
 
 seleccionados_bp = Blueprint('seleccionados', __name__, url_prefix='/v1/api')
 

@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify
 from datetime import datetime
-from database import PostgreSQLConnection
+from config.database import PostgreSQLConnection
 
 cursos_militares_bp = Blueprint('cursos_militares', __name__, url_prefix='/v1/api')
 
@@ -81,7 +81,7 @@ def parametros_cursos_militares():
                 "grado_actual": candidato['grado_actual'],
                 "categoria": candidato['categoria'],
                 "puntos_totales": round(total_puntos, 2),
-                "detalle_cursos": detalle_cursos,
+                # "detalle_cursos": detalle_cursos,
                 "desglose_puntos": {
                     "obligatorios": round(sum(c['puntos'] for c in detalle_cursos if c['tipo'] == 'obligatorio'), 2),
                     "otros": round(sum(c['puntos'] for c in detalle_cursos if c['tipo'] == 'otros'), 2)
@@ -108,7 +108,7 @@ def parametros_cursos_militares():
                         "descripcion": "Otros cursos (30%)"
                     }
                 },
-                "cursos_disponibles": cursos_militares,
+                # "cursos_disponibles": cursos_militares,
                 "fecha_consulta": datetime.now().isoformat()
             }
         }), 200

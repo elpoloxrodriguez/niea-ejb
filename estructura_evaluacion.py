@@ -1,5 +1,5 @@
 # estructura_evaluacion.py
-from database import get_db_connection, PostgreSQLConnection
+from config.database import get_db_connection, PostgreSQLConnection
 from psycopg2 import sql
 from functools import lru_cache
 from datetime import datetime

@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify
 from psycopg2 import sql
-from database import get_db_connection, PostgreSQLConnection
+from config.database import get_db_connection, PostgreSQLConnection
 from datetime import datetime
 
 candidatos_bp = Blueprint('candidatos', __name__, url_prefix='/v1/api')

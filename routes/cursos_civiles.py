@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify
 from datetime import datetime
-from database import PostgreSQLConnection
+from config.database import PostgreSQLConnection
 
 cursos_civiles_bp = Blueprint('cursos_civiles', __name__, url_prefix='/v1/api')
 

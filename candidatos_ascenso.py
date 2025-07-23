@@ -1,5 +1,5 @@
 from psycopg2 import sql
-from database import get_db_connection, PostgreSQLConnection
+from config.database import get_db_connection, PostgreSQLConnection
 from datetime import datetime
 
 CATEGORIAS = {
