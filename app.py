@@ -6,6 +6,7 @@ from routes.seleccionados import seleccionados_bp
 from routes.estructura import estructura_bp
 from routes.cursos_militares import cursos_militares_bp
 from routes.cursos_civiles import cursos_civiles_bp
+from routes.idiomas import idiomas_bp
 
 app = Flask(__name__)
 
@@ -18,6 +19,7 @@ app.register_blueprint(seleccionados_bp)
 app.register_blueprint(estructura_bp)
 app.register_blueprint(cursos_militares_bp)
 app.register_blueprint(cursos_civiles_bp)
+app.register_blueprint(idiomas_bp)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5001, debug=True)
