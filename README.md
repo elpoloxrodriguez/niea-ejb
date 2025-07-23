@@ -22,6 +22,8 @@
 ### Backend
 - **🐍 Python**: Lenguaje de programación principal para el desarrollo del servidor
 - **🌐 API RESTful**: Arquitectura de comunicación entre servicios con endpoints especializados
+
+### Base de Datos
 - **🐘 PostgreSQL**: Sistema de gestión de base de datos relacional potente y escalable
 
 ### Frontend
@@ -70,7 +72,7 @@
 ### Iniciar el Backend
 ```bash
 # Desde el directorio raíz del proyecto
-python3 api.py
+python3 app.py
 ```
 *El servidor estará disponible en: `http://localhost:5000`*
 
