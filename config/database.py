@@ -1,6 +1,7 @@
 import psycopg2
 from psycopg2 import pool
 import threading
+import logging
 
 class PostgreSQLConnection:
     """
@@ -9,6 +10,7 @@ class PostgreSQLConnection:
     """
     _connection_pool = None  # Pool de conexiones compartido por toda la aplicación
     _lock = threading.Lock() # Lock para asegurar inicialización thread-safe
+    _initialized = False     # Flag para evitar re-inicialización
 
     @classmethod
     def initialize(cls, **kwargs):
@@ -17,17 +19,20 @@ class PostgreSQLConnection:
         Recibe los parámetros de conexión como argumentos clave-valor.
         """
         with cls._lock:
-            if cls._connection_pool is None:
+            if cls._connection_pool is None and not cls._initialized:
                 try:
                     cls._connection_pool = psycopg2.pool.SimpleConnectionPool(
                         minconn=1,      # Número mínimo de conexiones abiertas
                         maxconn=10,     # Número máximo de conexiones abiertas
                         **kwargs
                     )
-                    print("✅ Pool de conexiones a PostgreSQL inicializado correctamente.")
+                    cls._initialized = True
+                    return True  # Indica que la inicialización fue exitosa
                 except Exception as e:
-                    print(f"❌ Error al inicializar pool: {str(e)}")
+                    logger = logging.getLogger(__name__)
+                    logger.error(f"❌ Error al inicializar pool: {str(e)}")
                     raise
+            return False  # Ya estaba inicializado
 
     @classmethod
     def get_connection(cls):
