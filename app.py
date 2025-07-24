@@ -49,7 +49,7 @@ def create_app():
     
     # Configuración de la aplicación
     app.config.update({
-        'SECRET_KEY': os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production'),
+        'SECRET_KEY': os.environ.get('SECRET_KEY', os.urandom(24).hex()),  # Generar una clave secreta aleatoria
         'JSON_AS_ASCII': False,  # Soporte para caracteres UTF-8
         'JSONIFY_PRETTYPRINT_REGULAR': True
     })

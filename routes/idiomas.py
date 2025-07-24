@@ -2,8 +2,7 @@ from flask import Blueprint, jsonify
 from datetime import datetime
 from config.database import PostgreSQLConnection
 
-idiomas_bp = Blueprint('idiomas', __name__, url_prefix='/v1/api')
-
+# Definición de la función primero
 def obtener_puntuacion_idiomas(cantidad):
     """Calcula la puntuación de idiomas según la cantidad"""
     if cantidad == 1:
@@ -13,6 +12,9 @@ def obtener_puntuacion_idiomas(cantidad):
     elif cantidad >= 3:
         return 1.8   # 100% de 1.8 (máximo)
     return 0.0
+
+# Creación del Blueprint
+idiomas_bp = Blueprint('idiomas', __name__, url_prefix='/v1/api')
 
 @idiomas_bp.route('/idiomas', methods=['GET'])
 def parametros_idiomas():
@@ -53,6 +55,7 @@ def parametros_idiomas():
         try:
             connection = db.get_connection()
             with connection.cursor() as cursor:
+                # Consulta para obtener idiomas
                 query = """
                     SELECT ccedula, COUNT(*) as cantidad 
                     FROM ejercito.pmiidiomad 
@@ -64,7 +67,58 @@ def parametros_idiomas():
                 column_names = [desc[0] for desc in cursor.description]
                 resultados_idiomas = [dict(zip(column_names, row)) for row in resultados]
 
+                # Procesar resultados
+                puntuaciones = {}
+                for item in resultados_idiomas:
+                    cedula = item['ccedula']
+                    cantidad = item['cantidad']
+                    puntuaciones[cedula] = {
+                        "puntos": obtener_puntuacion_idiomas(cantidad),
+                        "cantidad_idiomas": cantidad,
+                        "porcentaje": round((obtener_puntuacion_idiomas(cantidad) / 1.8 * 15), 2)
+                    }
+
+                # Preparar datos para insertar/actualizar
+                datos_guardar = []
+                for candidato in candidatos_data:
+                    cedula = int(candidato['cedula'])
+                    info = puntuaciones.get(cedula, {
+                        "puntos": 0.0,
+                        "cantidad_idiomas": 0,
+                        "porcentaje": 0.0
+                    })
+                    
+                    datos_guardar.append((
+                        candidato['cedula'],
+                        candidato['grado_actual'],
+                        candidato['categoria'],
+                        round(info['puntos'], 2),
+                        info['cantidad_idiomas'],
+                        info['porcentaje']
+                    ))
+
+                # Eliminar registros existentes para estas cédulas
+                delete_query = "TRUNCATE TABLE niea_ejb.idiomas RESTART IDENTITY"
+                cursor.execute(delete_query)
+
+                # Insertar nuevos registros
+                if datos_guardar:
+                    insert_query = """
+                        INSERT INTO niea_ejb.idiomas 
+                        (cedula, grado_actual, categoria, puntos_totales, cantidad_idiomas, porcentaje)
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                    """
+                    cursor.executemany(insert_query, datos_guardar)
+                
+                connection.commit()
+
+                # Verificar cuántos registros se insertaron
+                cursor.execute("SELECT COUNT(*) FROM niea_ejb.idiomas WHERE cedula::integer IN %s", (tuple(cedulas),))
+                count_inserted = cursor.fetchone()[0]
+
         except Exception as e:
+            if connection:
+                connection.rollback()
             return jsonify({
                 "status": "error",
                 "message": "Error en la base de datos",
@@ -74,17 +128,6 @@ def parametros_idiomas():
         finally:
             if connection:
                 db.return_connection(connection)
-
-        # Procesar resultados
-        puntuaciones = {}
-        for item in resultados_idiomas:
-            cedula = item['ccedula']
-            cantidad = item['cantidad']
-            puntuaciones[cedula] = {
-                "puntos": obtener_puntuacion_idiomas(cantidad),
-                "cantidad_idiomas": cantidad,
-                "porcentaje": round((obtener_puntuacion_idiomas(cantidad) / 1.8 * 15), 2)
-            }
 
         # Preparar respuesta
         resultados = []
@@ -122,7 +165,8 @@ def parametros_idiomas():
                         "3+_idiomas": "1.8 puntos (100%)"
                     }
                 },
-                "fecha_consulta": datetime.now().isoformat()
+                "fecha_consulta": datetime.now().isoformat(),
+                "registros_guardados": count_inserted
             }
         }), 200
 
