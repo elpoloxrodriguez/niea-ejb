@@ -6,11 +6,13 @@ from candidatos_ascenso import (
     CATEGORIAS
 )
 from config.database import get_db_connection, PostgreSQLConnection
+from authentication import token_required
 
 seleccionados_bp = Blueprint('seleccionados', __name__, url_prefix='/v1/api')
 
 @seleccionados_bp.route('/seleccionados', methods=['POST'])
-def obtener_candidatos_api():
+@token_required
+def obtener_candidatos_api(current_user):
     conn = None
     cursor = None
     try:

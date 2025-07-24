@@ -28,6 +28,9 @@ from routes.cursos_militares import cursos_militares_bp
 from routes.cursos_civiles import cursos_civiles_bp
 from routes.idiomas import idiomas_bp
 from routes.trabajo_institucional import trabajo_institucional_bp
+from routes.auth import auth_bp
+from routes.install import install_bp
+from routes.home import home_bp
 
 
 def setup_logging():
@@ -54,6 +57,9 @@ def create_app():
         'JSONIFY_PRETTYPRINT_REGULAR': True
     })
     
+    # La ruta raíz '/' ahora la maneja el blueprint home_bp
+    # La ruta anterior JSON se mueve a '/api/info' para mantener compatibilidad
+    
     return app
 
 
@@ -72,13 +78,16 @@ def initialize_database(logger, show_message=True):
 def register_blueprints(app, logger, show_messages=True):
     """Registra todos los blueprints de la aplicación."""
     blueprints = [
+        (install_bp, "Instalación"),
+        (auth_bp, "Autenticación"),
         (candidatos_bp, "Candidatos"),
         (seleccionados_bp, "Seleccionados"),
         (estructura_bp, "Estructura"),
         (cursos_militares_bp, "Cursos Militares"),
         (cursos_civiles_bp, "Cursos Civiles"),
         (idiomas_bp, "Idiomas"),
-        (trabajo_institucional_bp, "Trabajo Institucional")
+        (trabajo_institucional_bp, "Trabajo Institucional"),
+        (home_bp, "Bienvenida")
     ]
     
     for blueprint, description in blueprints:

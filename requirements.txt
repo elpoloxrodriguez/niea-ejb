@@ -8,6 +8,10 @@ Werkzeug>=2.0.0,<3.0.0
 # HTTP requests
 requests>=2.25.0
 
+# JWT Authentication
+PyJWT>=2.4.0
+bcrypt>=3.2.0
+
 # Additional Flask dependencies (if needed)
 click>=7.0
 ItsDangerous>=2.0

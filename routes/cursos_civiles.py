@@ -1,11 +1,14 @@
 from flask import Blueprint, jsonify
 from datetime import datetime
 from config.database import PostgreSQLConnection
+from authentication import token_required
+import json
 
 cursos_civiles_bp = Blueprint('cursos_civiles', __name__, url_prefix='/v1/api')
 
 @cursos_civiles_bp.route('/cursos-civiles', methods=['GET'])
-def cursos_civiles():
+@token_required
+def cursos_civiles(current_user):  # Añadido el parámetro current_user
     try:
         # 1. Definición de tipos de cursos con sus parámetros
         tipos_cursos = [
@@ -21,16 +24,48 @@ def cursos_civiles():
              ]}
         ]
 
-        # 2. Obtener lista de candidatos
-        from app import app
-        with app.test_client() as client:
-            response = client.get('/v1/api/candidatos')
-            if response.status_code != 200:
-                return jsonify({"status": "error", "message": "Error obteniendo candidatos"}), 500
-            candidatos_data = response.get_json()['data']
+        # 2. Obtener lista de candidatos directamente de la base de datos
+        from config.database import get_db_connection
+        from psycopg2 import sql
+        
+        conn = None
+        cursor = None
+        candidatos_data = []
+        
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            
+            query = sql.SQL("""
+                SELECT cedula, grado_actual, categoria
+                FROM niea_ejb.candidatos 
+                ORDER BY cedula ASC
+            """)
+            
+            cursor.execute(query)
+            resultados = cursor.fetchall()
+            
+            # Crear lista de candidatos
+            candidatos_data = [{
+                "cedula": row[0], 
+                "grado_actual": row[1],
+                "categoria": row[2]
+            } for row in resultados]
+            
             cedulas = [int(c['cedula']) for c in candidatos_data]
+            
+        except Exception as e:
+            return jsonify({
+                "status": "error",
+                "message": f"Error al obtener candidatos: {str(e)}"
+            }), 500
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                PostgreSQLConnection.return_connection(conn)
 
-                # 3. Consultar cursos desde la base de datos
+        # 3. Consultar cursos desde la base de datos
         conn = None
         cursor = None
         try:
@@ -48,7 +83,6 @@ def cursos_civiles():
             # Debug: Distribución de cnivel_inst
             distribucion = {nivel: sum(1 for c in cursos_data if c['cnivel_inst'] == nivel) 
                            for nivel in {c['cnivel_inst'] for c in cursos_data}}
-            print("Distribución cnivel_inst:", distribucion)
             
         except Exception as e:
             return jsonify({"status": "error", "message": f"Error en BD: {str(e)}"}), 500
@@ -175,6 +209,55 @@ def cursos_civiles():
         # 7. Ordenar resultados
         resultados_ordenados = sorted(resultados, key=lambda x: x['puntos_totales'], reverse=True)
 
+        # 8. Guardar resultados en la base de datos
+        db = PostgreSQLConnection()
+        connection = None
+        count_inserted = 0
+        try:
+            connection = db.get_connection()
+            with connection.cursor() as cursor:
+                # Eliminar registros existentes
+                delete_query = "TRUNCATE TABLE niea_ejb.cursos_civiles RESTART IDENTITY"
+                cursor.execute(delete_query)
+
+                # Preparar datos para insertar
+                datos_guardar = []
+                for resultado in resultados_ordenados:
+                    datos_guardar.append((
+                        resultado['cedula'],
+                        resultado['grado_actual'],
+                        resultado['puntos_totales'],
+                        json.dumps(resultado['desglose_puntos'])
+                    ))
+
+                # Insertar nuevos registros
+                if datos_guardar:
+                    insert_query = """
+                        INSERT INTO niea_ejb.cursos_civiles 
+                        (cedula, grado_actual, puntos_totales, desglose_puntos)
+                        VALUES (%s, %s, %s, %s)
+                    """
+                    cursor.executemany(insert_query, datos_guardar)
+                
+                connection.commit()
+
+                # Verificar cuántos registros se insertaron
+                cedulas_list = [resultado['cedula'] for resultado in resultados_ordenados]
+                cursor.execute("SELECT COUNT(*) FROM niea_ejb.cursos_civiles WHERE cedula IN %s", (tuple(cedulas_list),))
+                count_inserted = cursor.fetchone()[0]
+
+        except Exception as e:
+            if connection:
+                connection.rollback()
+            return jsonify({
+                "status": "error",
+                "message": "Error al guardar en la base de datos",
+                "details": str(e),
+                "timestamp": datetime.now().isoformat()
+            }), 500
+        finally:
+            if connection:
+                db.return_connection(connection)
 
         return jsonify({
             "status": "success",

@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify
 from datetime import datetime
 from config.database import PostgreSQLConnection
+from authentication import token_required
 
 trabajo_institucional_bp = Blueprint('trabajo_institucional', __name__, url_prefix='/v1/api')
 
@@ -15,18 +16,47 @@ def obtener_puntuacion_trabajo_valor(cantidad):
     return 0.0
 
 @trabajo_institucional_bp.route('/trabajo_institucional', methods=['GET'])
-def parametros_trabajo_valor():
+@token_required
+def parametros_trabajo_valor(current_user):  # Añadido el parámetro current_user
     try:
-        # Obtener candidatos
-        from app import app
-        with app.test_client() as client:
-            response = client.get('/v1/api/candidatos')
-            if response.status_code != 200:
-                return jsonify({
-                    "status": "error",
-                    "message": "No se pudo obtener los candidatos"
-                }), 500
-            candidatos_data = response.get_json()['data']
+        # Obtener candidatos directamente de la base de datos
+        from config.database import get_db_connection
+        from psycopg2 import sql
+        
+        conn = None
+        cursor = None
+        candidatos_data = []
+        
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            
+            query = sql.SQL("""
+                SELECT cedula, grado_actual, categoria
+                FROM niea_ejb.candidatos 
+                ORDER BY cedula ASC
+            """)
+            
+            cursor.execute(query)
+            resultados = cursor.fetchall()
+            
+            # Crear lista de candidatos
+            candidatos_data = [{
+                "cedula": row[0], 
+                "grado_actual": row[1],
+                "categoria": row[2]
+            } for row in resultados]
+            
+        except Exception as e:
+            return jsonify({
+                "status": "error",
+                "message": f"Error al obtener candidatos: {str(e)}"
+            }), 500
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                PostgreSQLConnection.return_connection(conn)
 
         # Extraer cédulas y grados actuales
         try:
@@ -90,6 +120,65 @@ def parametros_trabajo_valor():
                 "porcentaje": round((obtener_puntuacion_trabajo_valor(cantidad) / 1.8 * 15), 2)
             }
 
+        # Preparar datos para insertar/actualizar en la tabla trabajo_institucional
+        datos_guardar = []
+        for candidato in candidatos_data:
+            cedula = int(candidato['cedula'])
+            info = puntuaciones.get(cedula, {
+                "puntos": 0.0,
+                "cantidad_trabajos_valor": 0,
+                "porcentaje": 0.0
+            })
+            
+            datos_guardar.append((
+                candidato['cedula'],
+                candidato['grado_actual'],
+                candidato['categoria'],
+                round(info['puntos'], 2),
+                info['cantidad_trabajos_valor'],
+                info['porcentaje']
+            ))
+
+        # Guardar resultados en la base de datos
+        db = PostgreSQLConnection()
+        connection = None
+        count_inserted = 0
+        try:
+            connection = db.get_connection()
+            with connection.cursor() as cursor:
+                # Eliminar registros existentes
+                delete_query = "TRUNCATE TABLE niea_ejb.trabajo_institucional RESTART IDENTITY"
+                cursor.execute(delete_query)
+
+                # Insertar nuevos registros
+                if datos_guardar:
+                    insert_query = """
+                        INSERT INTO niea_ejb.trabajo_institucional 
+                        (cedula, grado_actual, categoria, puntos_totales, cantidad_trabajos_valor, porcentaje)
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                    """
+                    cursor.executemany(insert_query, datos_guardar)
+                
+                connection.commit()
+
+                # Verificar cuántos registros se insertaron
+                cedulas_list = [int(c['cedula']) for c in candidatos_data]
+                cursor.execute("SELECT COUNT(*) FROM niea_ejb.trabajo_institucional WHERE cedula IN %s", (tuple(cedulas_list),))
+                count_inserted = cursor.fetchone()[0]
+
+        except Exception as e:
+            if connection:
+                connection.rollback()
+            return jsonify({
+                "status": "error",
+                "message": "Error al guardar en la base de datos",
+                "details": str(e),
+                "timestamp": datetime.now().isoformat()
+            }), 500
+        finally:
+            if connection:
+                db.return_connection(connection)
+
         # Preparar respuesta
         resultados = []
         for candidato in candidatos_data:
@@ -126,7 +215,8 @@ def parametros_trabajo_valor():
                         "3+_trabajos": "0.72 puntos (40%)"
                     }
                 },
-                "fecha_consulta": datetime.now().isoformat()
+                "fecha_consulta": datetime.now().isoformat(),
+                "registros_guardados": count_inserted
             }
         }), 200
 

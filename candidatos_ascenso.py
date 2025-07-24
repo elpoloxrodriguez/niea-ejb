@@ -104,37 +104,37 @@ def guardar_candidatos_en_db(
     """
     insert_query = sql.SQL("""
         INSERT INTO niea_ejb.candidatos (
-            cedula, nombre_completo, ultimo_ascenso, grado_actual, 
-            descripcion_grado, descripcion_grado_c, fecha_ingreso, 
-            fecha_ingreso_facultad, categoria, categoria_descripcion,
-            tiempo_requerido, anos_en_grado, fecha_consulta, grado,
-            categoria_original, fecha_registro
+            cedula, nombres, apellidos, grado_actual, categoria,
+            fecha_ingreso_ejercito, unidad_actual, especialidad,
+            tiempo_servicio, observaciones
         ) VALUES (
-            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
         )
     """)
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cursor:
-                cursor.execute("TRUNCATE TABLE niea_ejb.candidatos RESTART IDENTITY")
+                # Truncar tablas dependientes primero para evitar errores de FK
+                cursor.execute("TRUNCATE TABLE niea_ejb.seleccionados RESTART IDENTITY CASCADE")
+                cursor.execute("TRUNCATE TABLE niea_ejb.candidatos RESTART IDENTITY CASCADE")
                 for candidato in candidatos:
+                    # Separar nombre completo en nombres y apellidos
+                    nombre_completo = str(candidato.get('nombre_completo', '')).strip()
+                    partes_nombre = nombre_completo.split(' ', 1)
+                    nombres = partes_nombre[0] if len(partes_nombre) > 0 else ''
+                    apellidos = partes_nombre[1] if len(partes_nombre) > 1 else ''
+                    
                     cursor.execute(insert_query, (
-                        str(candidato['cedula'])[:20],
-                        str(candidato['nombre_completo'])[:100],
-                        candidato['ultimo_ascenso'],
-                        str(candidato['grado_actual'])[:10],
-                        str(candidato['descripcion_grado'])[:50],
-                        str(candidato['descripcion_grado_c'])[:50],
-                        candidato['fecha_ingreso'],
-                        candidato['fecha_ingreso_facultad'],
-                        candidato['xoficial'],
-                        candidato['categoria_descripcion'],
-                        int(candidato['tiempo_requerido']),
-                        float(candidato['anos_en_grado']),
-                        fecha_consulta,
-                        str(grado)[:10],
-                        candidato['xoficial'],
-                        datetime.now()
+                        str(candidato['cedula'])[:20],  # cedula
+                        nombres[:100],  # nombres
+                        apellidos[:100],  # apellidos
+                        str(candidato.get('grado_actual', ''))[:50],  # grado_actual
+                        str(candidato.get('xoficial', ''))[:50],  # categoria
+                        candidato.get('fecha_ingreso'),  # fecha_ingreso_ejercito
+                        str(candidato.get('unidad_actual', ''))[:100],  # unidad_actual
+                        str(candidato.get('especialidad', ''))[:100],  # especialidad
+                        int(candidato.get('tiempo_requerido', 0)),  # tiempo_servicio
+                        f"Grado: {grado}, Categoría: {categoria}, Consulta: {fecha_consulta}"  # observaciones
                     ))
                 conn.commit()
         return True

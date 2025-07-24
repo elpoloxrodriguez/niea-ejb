@@ -1,11 +1,14 @@
 from flask import Blueprint, jsonify
 from datetime import datetime
 from config.database import PostgreSQLConnection
+from authentication import token_required
+import json
 
 cursos_militares_bp = Blueprint('cursos_militares', __name__, url_prefix='/v1/api')
 
-@cursos_militares_bp.route('/parametros-cursos-militares', methods=['GET'])
-def parametros_cursos_militares():
+@cursos_militares_bp.route('/cursos-militares', methods=['GET'])
+@token_required
+def cursos_militares(current_user):  # Añadido el parámetro current_user
     try:
         # Definición de cursos militares con tipos
         cursos_militares = [
@@ -20,19 +23,46 @@ def parametros_cursos_militares():
             {"curso": "F", "tipo": "otros"}  # Curso adicional
         ]
 
-        # Obtener candidatos usando el test client
-        from app import app
-        with app.test_client() as client:
-            response = client.get('/v1/api/candidatos')
-            if response.status_code != 200:
-                return jsonify({
-                    "status": "error",
-                    "message": "No se pudo obtener los candidatos"
-                }), 500
+        # Obtener candidatos directamente de la base de datos
+        from config.database import get_db_connection
+        from psycopg2 import sql
+        
+        conn = None
+        cursor = None
+        candidatos_data = []
+        
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            
+            query = sql.SQL("""
+                SELECT cedula, grado_actual, categoria
+                FROM niea_ejb.candidatos 
+                ORDER BY cedula ASC
+            """)
+            
+            cursor.execute(query)
+            resultados = cursor.fetchall()
+            
+            # Crear lista de candidatos
+            candidatos_data = [{
+                "cedula": row[0], 
+                "grado_actual": row[1],
+                "categoria": row[2]
+            } for row in resultados]
+            
+        except Exception as e:
+            return jsonify({
+                "status": "error",
+                "message": f"Error al obtener candidatos: {str(e)}"
+            }), 500
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                PostgreSQLConnection.return_connection(conn)
 
-            candidatos_data = response.get_json()['data']
-
-                # Función para calcular puntos según los nuevos parámetros
+        # Función para calcular puntos según los nuevos parámetros
         def calcular_puntos(candidato, curso):
             puntos = 0
             tipo_curso = curso.get('tipo', '')
@@ -81,7 +111,6 @@ def parametros_cursos_militares():
                 "grado_actual": candidato['grado_actual'],
                 "categoria": candidato['categoria'],
                 "puntos_totales": round(total_puntos, 2),
-                # "detalle_cursos": detalle_cursos,
                 "desglose_puntos": {
                     "obligatorios": round(sum(c['puntos'] for c in detalle_cursos if c['tipo'] == 'obligatorio'), 2),
                     "otros": round(sum(c['puntos'] for c in detalle_cursos if c['tipo'] == 'otros'), 2)
@@ -91,6 +120,56 @@ def parametros_cursos_militares():
         # Ordenar resultados de mayor a menor puntos
         resultados_ordenados = sorted(resultados, key=lambda x: x['puntos_totales'], reverse=True)
 
+        # Guardar resultados en la base de datos
+        db = PostgreSQLConnection()
+        connection = None
+        count_inserted = 0
+        try:
+            connection = db.get_connection()
+            with connection.cursor() as cursor:
+                # Eliminar registros existentes
+                delete_query = "TRUNCATE TABLE niea_ejb.cursos_militares RESTART IDENTITY"
+                cursor.execute(delete_query)
+
+                # Preparar datos para insertar
+                datos_guardar = []
+                for resultado in resultados_ordenados:
+                    datos_guardar.append((
+                        resultado['cedula'],
+                        resultado['grado_actual'],
+                        resultado['categoria'],
+                        resultado['puntos_totales'],
+                        json.dumps(resultado['desglose_puntos'])
+                    ))
+
+                # Insertar nuevos registros
+                if datos_guardar:
+                    insert_query = """
+                        INSERT INTO niea_ejb.cursos_militares 
+                        (cedula, grado_actual, categoria, puntos_totales, desglose_puntos)
+                        VALUES (%s, %s, %s, %s, %s)
+                    """
+                    cursor.executemany(insert_query, datos_guardar)
+                
+                connection.commit()
+
+                # Verificar cuántos registros se insertaron
+                cedulas_list = [resultado['cedula'] for resultado in resultados_ordenados]
+                cursor.execute("SELECT COUNT(*) FROM niea_ejb.cursos_militares WHERE cedula IN %s", (tuple(cedulas_list),))
+                count_inserted = cursor.fetchone()[0]
+
+        except Exception as e:
+            if connection:
+                connection.rollback()
+            return jsonify({
+                "status": "error",
+                "message": "Error al guardar en la base de datos",
+                "details": str(e),
+                "timestamp": datetime.now().isoformat()
+            }), 500
+        finally:
+            if connection:
+                db.return_connection(connection)
 
         return jsonify({
             "status": "success",
@@ -108,7 +187,6 @@ def parametros_cursos_militares():
                         "descripcion": "Otros cursos (30%)"
                     }
                 },
-                # "cursos_disponibles": cursos_militares,
                 "fecha_consulta": datetime.now().isoformat()
             }
         }), 200

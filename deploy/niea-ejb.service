@@ -1,0 +1,30 @@
+[Unit]
+Description=NIEA-EJB Sistema de Evaluación Militar
+After=network.target postgresql.service redis.service
+Wants=postgresql.service redis.service
+
+[Service]
+Type=notify
+User=niea-ejb
+Group=niea-ejb
+WorkingDirectory=/opt/niea-ejb
+Environment=PATH=/opt/niea-ejb/venv/bin
+ExecStart=/opt/niea-ejb/venv/bin/gunicorn --config gunicorn.conf.py app:app
+ExecReload=/bin/kill -s HUP $MAINPID
+KillMode=mixed
+TimeoutStopSec=5
+PrivateTmp=true
+Restart=always
+RestartSec=10
+
+# Configuración de seguridad
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/niea-ejb /var/log/niea-ejb /var/backups/niea-ejb
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+[Install]
+WantedBy=multi-user.target

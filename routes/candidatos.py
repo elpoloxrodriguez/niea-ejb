@@ -2,11 +2,13 @@ from flask import Blueprint, jsonify
 from psycopg2 import sql
 from config.database import get_db_connection, PostgreSQLConnection
 from datetime import datetime
+from authentication import token_required
 
 candidatos_bp = Blueprint('candidatos', __name__, url_prefix='/v1/api')
 
 @candidatos_bp.route('/candidatos', methods=['GET'])
-def obtener_cedulas_candidatos():
+@token_required
+def obtener_cedulas_candidatos(current_user):
     conn = None
     cursor = None
     try:

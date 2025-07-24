@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify
 from datetime import datetime
 from config.database import PostgreSQLConnection
+from authentication import token_required
 
 # Definición de la función primero
 def obtener_puntuacion_idiomas(cantidad):
@@ -17,18 +18,47 @@ def obtener_puntuacion_idiomas(cantidad):
 idiomas_bp = Blueprint('idiomas', __name__, url_prefix='/v1/api')
 
 @idiomas_bp.route('/idiomas', methods=['GET'])
-def parametros_idiomas():
+@token_required
+def parametros_idiomas(current_user):  # Añadido el parámetro current_user
     try:
-        # Obtener candidatos
-        from app import app
-        with app.test_client() as client:
-            response = client.get('/v1/api/candidatos')
-            if response.status_code != 200:
-                return jsonify({
-                    "status": "error",
-                    "message": "No se pudo obtener los candidatos"
-                }), 500
-            candidatos_data = response.get_json()['data']
+        # Obtener candidatos directamente de la base de datos
+        from config.database import get_db_connection
+        from psycopg2 import sql
+        
+        conn = None
+        cursor = None
+        candidatos_data = []
+        
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            
+            query = sql.SQL("""
+                SELECT cedula, grado_actual, categoria
+                FROM niea_ejb.candidatos 
+                ORDER BY cedula ASC
+            """)
+            
+            cursor.execute(query)
+            resultados = cursor.fetchall()
+            
+            # Crear lista de candidatos
+            candidatos_data = [{
+                "cedula": row[0], 
+                "grado_actual": row[1],
+                "categoria": row[2]
+            } for row in resultados]
+            
+        except Exception as e:
+            return jsonify({
+                "status": "error",
+                "message": f"Error al obtener candidatos: {str(e)}"
+            }), 500
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                PostgreSQLConnection.return_connection(conn)
 
         # Extraer cédulas
         try:
